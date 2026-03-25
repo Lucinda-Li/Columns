@@ -42,10 +42,13 @@ BLUE:          .word 0x1c2f5a
 YELLOW:        .word 0xd4af37
 CYAN:          .word 0xf5f0e6
 MAGENTA:       .word 0xb76e79
-LUXURY_BLUE:   .word 0x001a2eff
-PURE_WHITE:    .word 0xffffff
-GREY:          .word 0xe5c76b
-PAUSE_RED:     .word 0xb11226
+LUXURY_BLUE:         .word 0x001a2eff   
+LV_LABEL_TIFFANY:    .word 0x81D8D0     
+LV_STAGE_ROLEX:      .word 0x0F6A4B     
+SCORE_LABEL_CARTIER: .word 0x8A1538     
+PURE_WHITE:          .word 0xffffff
+GREY:                .word 0xe5c76b
+PAUSE_RED:           .word 0xb11226
 
 ##############################################################################
 # Luxury 6-color gem palette
@@ -105,13 +108,21 @@ music_wait_frames:
 ##############################################################################
 land_sfx_instrument:      .word 0
 land_sfx_volume:          .word 42
+
 clear_sfx_instrument:     .word 48
 clear_sfx_volume:         .word 56
+
 rotate_sfx_instrument:    .word 0
 rotate_sfx_volume:        .word 34
-gameover_sfx_instrument:  .word 48
-gameover_sfx_volume:      .word 62
 
+pause_sfx_instrument:     .word 48 
+pause_sfx_volume:         .word 54
+
+resume_sfx_instrument:    .word 0  
+resume_sfx_volume:        .word 46
+
+gameover_sfx_instrument:  .word 48
+gameover_sfx_volume:      .word 66
 ##############################################################################
 # Pause state / glyphs
 ##############################################################################
@@ -130,7 +141,7 @@ GLYPH_V: .word 5, 5, 5, 5, 2
 GLYPH_R: .word 7, 5, 7, 6, 5
 GLYPH_Q: .word 7, 5, 5, 7, 1
 GLYPH_C: .word 7, 4, 4, 4, 7
-
+GLYPH_L: .word 4, 4, 4, 4, 7
 GLYPH_0: .word 7, 5, 5, 5, 7
 GLYPH_1: .word 2, 6, 2, 2, 7
 GLYPH_2: .word 7, 1, 7, 4, 7
@@ -147,11 +158,16 @@ digit_glyph_table:
     .word GLYPH_5, GLYPH_6, GLYPH_7, GLYPH_8, GLYPH_9
 
 ##############################################################################
-# Score state
+# Score and Speed state
 ##############################################################################
 score_value:            .word 0
 difficulty_multiplier:  .word 1
 score_base_per_gem:     .word 10
+
+speed_stage:            .word 0     # 0 = normal, 1 = passed 500, 2 = passed 2000
+drop_delay_start:       .word 30
+drop_delay_after_500:   .word 24
+drop_delay_after_2000:  .word 18
 
 ##############################################################################
 # Code
@@ -249,7 +265,7 @@ rotate:
     sw $t2, 8($t0)
 
     jal play_rotate_sfx
-    jal erase_column           # erase gems at current position
+    jal erase_column           # erase pixels at current position
     jal draw_column            # redraw with rotated colors
     j game_loop
 
@@ -260,6 +276,7 @@ quit_game:
 toggle_pause:
     li   $t0, 1
     sw   $t0, paused_flag
+    jal  play_pause_sfx
     jal  draw_paused_message
     jal  wait_key_release
 
@@ -273,6 +290,7 @@ pause_loop:
     lw   $t2, 4($t0)
     bne  $t2, 0x70, pause_loop
     sw   $zero, paused_flag
+    jal  play_resume_sfx
     jal  clear_paused_message
     jal  wait_key_release
     j    game_loop
@@ -453,28 +471,89 @@ play_rotate_sfx:
     lw   $ra, 0($sp)
     addi $sp, $sp, 4
     jr   $ra
+play_pause_sfx:
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
 
+    li   $v0, 31
+    li   $a0, 76              
+    li   $a1, 140
+    lw   $a2, pause_sfx_instrument
+    lw   $a3, pause_sfx_volume
+    syscall
+
+    li   $v0, 31
+    li   $a0, 81              
+    li   $a1, 170
+    lw   $a2, pause_sfx_instrument
+    lw   $a3, pause_sfx_volume
+    syscall
+
+    li   $v0, 31
+    li   $a0, 88             
+    li   $a1, 220
+    lw   $a2, pause_sfx_instrument
+    lw   $a3, pause_sfx_volume
+    syscall
+
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
+
+
+play_resume_sfx:
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+
+    li   $v0, 31
+    li   $a0, 79          
+    li   $a1, 100
+    lw   $a2, resume_sfx_instrument
+    lw   $a3, resume_sfx_volume
+    syscall
+
+    li   $v0, 31
+    li   $a0, 84            
+    li   $a1, 130
+    lw   $a2, resume_sfx_instrument
+    lw   $a3, resume_sfx_volume
+    syscall
+
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
 play_game_over_sfx:
     addi $sp, $sp, -4
     sw   $ra, 0($sp)
+
     li   $v0, 31
-    li   $a0, 64
+    li   $a0, 69              
     li   $a1, 180
     lw   $a2, gameover_sfx_instrument
     lw   $a3, gameover_sfx_volume
     syscall
+
     li   $v0, 31
-    li   $a0, 60
-    li   $a1, 220
+    li   $a0, 64             
+    li   $a1, 260
     lw   $a2, gameover_sfx_instrument
     lw   $a3, gameover_sfx_volume
     syscall
+
     li   $v0, 31
-    li   $a0, 57
+    li   $a0, 60             
     li   $a1, 320
     lw   $a2, gameover_sfx_instrument
     lw   $a3, gameover_sfx_volume
     syscall
+
+    li   $v0, 31
+    li   $a0, 57          
+    li   $a1, 420
+    lw   $a2, gameover_sfx_instrument
+    lw   $a3, gameover_sfx_volume
+    syscall
+
     lw   $ra, 0($sp)
     addi $sp, $sp, 4
     jr   $ra
@@ -1168,60 +1247,74 @@ draw_paused_message:
     addi $sp, $sp, -8
     sw   $ra, 4($sp)
     sw   $s0, 0($sp)
+
     jal  clear_paused_message
     lw   $s0, PAUSE_RED
-    li   $a0, 8
+
+    li   $a0, 3
     li   $a1, 12
     la   $a2, GLYPH_P
     move $a3, $s0
     jal  draw_glyph_3x5
-    li   $a0, 8
+
+    li   $a0, 3
     li   $a1, 16
     la   $a2, GLYPH_A
     move $a3, $s0
     jal  draw_glyph_3x5
-    li   $a0, 8
+
+    li   $a0, 3
     li   $a1, 20
     la   $a2, GLYPH_U
     move $a3, $s0
     jal  draw_glyph_3x5
-    li   $a0, 8
+
+    li   $a0, 3
     li   $a1, 24
     la   $a2, GLYPH_S
     move $a3, $s0
     jal  draw_glyph_3x5
-    li   $a0, 8
+
+    li   $a0, 3
     li   $a1, 28
     la   $a2, GLYPH_E
     move $a3, $s0
     jal  draw_glyph_3x5
+
     lw   $s0, 0($sp)
     lw   $ra, 4($sp)
     addi $sp, $sp, 8
     jr   $ra
-
 clear_paused_message:
     addi $sp, $sp, -12
     sw   $ra, 8($sp)
     sw   $s0, 4($sp)
     sw   $s1, 0($sp)
-    li   $s0, 7
+
+    li   $s0, 2               
+
 clear_pause_row_loop:
-    li   $t0, 15
+    li   $t0, 10             
     beq  $s0, $t0, clear_pause_done
-    li   $s1, 12
+
+    li   $s1, 12              
+
 clear_pause_col_loop:
-    li   $t0, 31
+    li   $t0, 31              
     beq  $s1, $t0, clear_pause_next_row
+
     move $a0, $s0
     move $a1, $s1
     jal  display_cell_address
     sw   $zero, 0($v0)
+
     addi $s1, $s1, 1
     j    clear_pause_col_loop
+
 clear_pause_next_row:
     addi $s0, $s0, 1
     j    clear_pause_row_loop
+
 clear_pause_done:
     lw   $s1, 0($sp)
     lw   $s0, 4($sp)
@@ -1232,8 +1325,15 @@ clear_pause_done:
 init_score_state:
     addi $sp, $sp, -4
     sw   $ra, 0($sp)
+
     sw   $zero, score_value
+    sw   $zero, speed_stage
+
+    lw   $t0, drop_delay_start
+    sw   $t0, drop_delay
+
     jal  draw_score_panel
+
     lw   $ra, 0($sp)
     addi $sp, $sp, 4
     jr   $ra
@@ -1266,47 +1366,91 @@ add_score_for_clear:
     addi $sp, $sp, -8
     sw   $s0, 4($sp)
     sw   $ra, 0($sp)
+
     lw   $t0, score_base_per_gem
     mult $a0, $t0
     mflo $t1
+
     lw   $s0, score_value
     addu $s0, $s0, $t1
     sw   $s0, score_value
+
+    jal  update_gravity_speed_by_score
+
     jal  draw_score_panel
+
     lw   $ra, 0($sp)
     lw   $s0, 4($sp)
     addi $sp, $sp, 8
     jr   $ra
+update_gravity_speed_by_score:
+    lw   $t0, speed_stage
+    lw   $t1, score_value
 
+    bne  $t0, $zero, check_stage_one
+
+    li   $t2, 500
+    slt  $t3, $t1, $t2         
+    bne  $t3, $zero, speed_update_done
+
+    lw   $t4, drop_delay_after_500
+    sw   $t4, drop_delay
+    li   $t5, 1
+    sw   $t5, speed_stage
+    j    speed_update_done
+
+check_stage_one:
+    li   $t2, 1
+    bne  $t0, $t2, speed_update_done
+
+    li   $t2, 2000
+    slt  $t3, $t1, $t2        
+    bne  $t3, $zero, speed_update_done
+
+    lw   $t4, drop_delay_after_2000
+    sw   $t4, drop_delay
+    li   $t5, 2
+    sw   $t5, speed_stage
+
+speed_update_done:
+    jr   $ra
+    
 clear_score_panel:
     addi $sp, $sp, -12
     sw   $ra, 8($sp)
     sw   $s0, 4($sp)
     sw   $s1, 0($sp)
-    li   $s0, 19
+
+    li   $s0, 13   
+    
 clear_score_row_loop:
-    li   $t0, 31
+    li   $t0, 31              
     beq  $s0, $t0, clear_score_done
-    li   $s1, 10
+
+    li   $s1, 10              
+
 clear_score_col_loop:
-    li   $t0, 32
+    li   $t0, 32              
     beq  $s1, $t0, clear_score_next_row
+
     move $a0, $s0
     move $a1, $s1
     jal  display_cell_address
     sw   $zero, 0($v0)
+
     addi $s1, $s1, 1
     j    clear_score_col_loop
+
 clear_score_next_row:
     addi $s0, $s0, 1
     j    clear_score_row_loop
+
 clear_score_done:
     lw   $s1, 0($sp)
     lw   $s0, 4($sp)
     lw   $ra, 8($sp)
     addi $sp, $sp, 12
     jr   $ra
-
 draw_digit_at:
     addi $sp, $sp, -20
     sw   $ra, 16($sp)
@@ -1346,76 +1490,119 @@ draw_score_panel:
     sw   $s5, 8($sp)
     sw   $s6, 4($sp)
     sw   $s7, 0($sp)
+
     jal  clear_score_panel
-    lw   $s0, LUXURY_BLUE
+
+    lw   $s0, LV_LABEL_TIFFANY  
+    lw   $s1, LV_STAGE_ROLEX    
+
+    li   $a0, 13
+    li   $a1, 12
+    la   $a2, GLYPH_L
+    move $a3, $s0
+    jal  draw_glyph_3x5
+
+    li   $a0, 13
+    li   $a1, 16
+    la   $a2, GLYPH_V
+    move $a3, $s0
+    jal  draw_glyph_3x5
+
+    lw   $t0, speed_stage
+    addi $s7, $t0, 1
+
+    li   $a0, 13
+    li   $a1, 21
+    move $a2, $s7
+    move $a3, $s1
+    jal  draw_digit_at
+
+   lw   $s0, SCORE_LABEL_CARTIER
+
     li   $a0, 20
     li   $a1, 12
     la   $a2, GLYPH_S
     move $a3, $s0
     jal  draw_glyph_3x5
+
     li   $a0, 20
     li   $a1, 16
     la   $a2, GLYPH_C
     move $a3, $s0
     jal  draw_glyph_3x5
+
     li   $a0, 20
     li   $a1, 20
     la   $a2, GLYPH_O
     move $a3, $s0
     jal  draw_glyph_3x5
+
     li   $a0, 20
     li   $a1, 24
     la   $a2, GLYPH_R
     move $a3, $s0
     jal  draw_glyph_3x5
+
     li   $a0, 20
     li   $a1, 28
     la   $a2, GLYPH_E
     move $a3, $s0
     jal  draw_glyph_3x5
+
     lw   $s1, PURE_WHITE
+
     lw   $t0, score_value
+
     li   $t1, 10000
     divu $t0, $t1
     mflo $s2
     mfhi $t0
+
     li   $t1, 1000
     divu $t0, $t1
     mflo $s3
     mfhi $t0
+
     li   $t1, 100
     divu $t0, $t1
     mflo $s4
     mfhi $t0
+
     li   $t1, 10
     divu $t0, $t1
     mflo $s5
     mfhi $s6
+
     li   $a0, 26
     li   $a1, 12
     move $a2, $s2
     move $a3, $s1
     jal  draw_digit_at
+
     li   $a0, 26
     li   $a1, 16
     move $a2, $s3
     move $a3, $s1
     jal  draw_digit_at
+
     li   $a0, 26
     li   $a1, 20
     move $a2, $s4
     move $a3, $s1
     jal  draw_digit_at
+
     li   $a0, 26
     li   $a1, 24
     move $a2, $s5
     move $a3, $s1
     jal  draw_digit_at
+
     li   $a0, 26
     li   $a1, 28
     move $a2, $s6
     move $a3, $s1
     jal  draw_digit_at
+
     lw   $s7, 0($sp)
     lw   $s6, 4($sp)
     lw   $s5, 8($sp)
