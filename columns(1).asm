@@ -36,39 +36,18 @@ MAGENTA: .word 0xb76e79     # Rose Gold 玫瑰金
 LUXURY_BLUE: .word 0x001A2EFF   # 深蓝（很高级）
 PURE_WHITE:  .word 0xFFFFFF     # 数字用纯白
 ##############################################################################
-# Hard 2 gem palette
-# 3 visual style families x 6 colours = 18 gem appearances
-#
-# Family 1: deep jewel
-# Family 2: bright cut
-# Family 3: dark metallic
+# Luxury 6-color gem palette
+# 回退 Hard 2：只保留 6 个最终奢侈配色
 ##############################################################################
-gem_palette_count: .word 18
+gem_palette_count: .word 6
 
 gem_palette:
-    # Family 1: deep jewel
-    .word 0x6e0f1f   # ruby
-    .word 0x0f5c4a   # emerald
-    .word 0x1c2f5a   # sapphire
-    .word 0xd4af37   # gold
-    .word 0xf5f0e6   # ivory
-    .word 0xb76e79   # rose gold
-
-    # Family 2: bright cut
-    .word 0x8c2434   # bright ruby
-    .word 0x1a7a65   # bright emerald
-    .word 0x304f8f   # bright sapphire
-    .word 0xf0cf65   # bright gold
-    .word 0xffffff   # bright ivory
-    .word 0xd997a1   # bright rose
-
-    # Family 3: dark metallic
-    .word 0x4f0814   # dark ruby
-    .word 0x083f34   # dark emerald
-    .word 0x101d3a   # dark sapphire
-    .word 0x9e7d12   # dark gold
-    .word 0xd8d0c2   # dark ivory
-    .word 0x8d4f5d   # dark rose
+    .word 0x6e0f1f   # Burgundy 酒红
+    .word 0x0f5c4a   # Emerald 墨绿
+    .word 0x1c2f5a   # Midnight Navy 深海军蓝
+    .word 0xd4af37   # Gold 金色
+    .word 0xf5f0e6   # Ivory 象牙白
+    .word 0xb76e79   # Rose Gold 玫瑰金
 ##############################################################################
 GREY: .word 0xe5c76b
 PAUSE_RED: .word 0xb11226    # luxury deep red
@@ -1418,7 +1397,10 @@ count_marked_done:
 
 add_score_for_clear:
     # a0 = number of gems cleared in this pass
-    # a1 = chain level (1 for first clear, 2+ for chain reactions)
+    # 计分规则：每消掉 1 个 gem，加 10 分
+    # 例如：3 个 = 30 分，4 个 = 40 分
+    # a1 现在不再使用（chain level ignored）
+
     addi $sp, $sp, -8
     sw   $s0, 4($sp)
     sw   $ra, 0($sp)
@@ -1426,15 +1408,6 @@ add_score_for_clear:
     # t1 = gems_cleared * score_base_per_gem
     lw   $t0, score_base_per_gem
     mult $a0, $t0
-    mflo $t1
-
-    # t1 *= difficulty_multiplier
-    lw   $t2, difficulty_multiplier
-    mult $t1, $t2
-    mflo $t1
-
-    # t1 *= chain_level
-    mult $t1, $a1
     mflo $t1
 
     # score_value += t1
