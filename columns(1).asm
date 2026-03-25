@@ -42,7 +42,7 @@ BLUE:          .word 0x1c2f5a
 YELLOW:        .word 0xd4af37
 CYAN:          .word 0xf5f0e6
 MAGENTA:       .word 0xb76e79
-LUXURY_BLUE:   .word 0x001a2e
+LUXURY_BLUE:   .word 0x001a2eff
 PURE_WHITE:    .word 0xffffff
 GREY:          .word 0xe5c76b
 PAUSE_RED:     .word 0xb11226
