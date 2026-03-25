@@ -1,8 +1,8 @@
 ################# CSC258 Assembly Final Project ###################
 # This file contains our implementation of Columns.
 #
-# Student 1: Name, Student Number
-# Student 2: Name, Student Number (if applicable)
+# Student 1: Chuning Li, 1010880290
+# Student 2: Wenzhao Li  1011425290
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
@@ -13,6 +13,15 @@
 # - Display width in pixels:    256
 # - Display height in pixels:   256
 # - Base Address for Display:   0x10008000 ($gp)
+######################## Playing Area Configuration ##########################
+# - The game board is surrounded by grey border walls.
+# - Playable rows range from 1 to 30.
+# - Playable columns range from 1 to 8.
+# - Row 0 is the top wall.
+# - Row 31 is the bottom wall.
+# - Column 0 is the left wall.
+# - Column 9 is the right wall.
+# - Each new falling column begins at row 1, column 4
 ##############################################################################
 
     .data
@@ -46,14 +55,11 @@ column_col:    .word 4
 # Incremented every tick; reset to 0 whenever the column drops one row.
 drop_counter:  .word 0
  
-# How many ticks must pass before the column auto-drops one row.
-# At 60 FPS, a value of 30 means the column falls once every ~0.5 seconds.
+# Number of ticks must pass before the column auto-drops one row.
 drop_delay:    .word 30
 
-# Scratch space used to flag cells that are part of a match before clearing.
-# Layout: one word per board cell, row-major, rows 0-31 x cols 0-9.
-# Stride is 40 bytes per row (10 words) to keep indexing simple.
-# Total space needed: 32 rows * 40 bytes = 1280 bytes.
+# Space used to record pixels that are part of a match before clearing.
+# Total space needed: 32 rows * 10 cols * 4 bytes/pixel = 1280 bytes.
 match_flags:   .space 1280
 
 ##############################################################################
@@ -64,33 +70,33 @@ match_flags:   .space 1280
 
     # Run the game.
 main:
-    jal draw_borders       # draw grey borders
-    jal spawn_new_column   # generate the first falling column and draw it
+    jal draw_borders          # draw grey borders
+    jal generate_new_column   # generate the first falling column and draw it
 
 game_loop:
-    li $v0, 32                  # sleep for 16 ms (~60 FPS)
+    li $v0, 32                # sleep for 16 ms (~60 FPS)
     li $a0, 16             
     syscall  
     
     jal auto_drop_tick          # advance the gravity timer; may drop the column
 
-    lw $t0, ADDR_KBRD           # $t0 = keyboard base address (0xffff0000)
+    lw $t0, ADDR_KBRD           # $t0 = keyboard base address
     lw $t1, 0($t0)              # $t1 = first word (1 if key pressed, 0 otherwise)
 
-    beq $t1, 1, key_pressed     # if key pressed → handle input
+    beq $t1, 1, key_pressed     # if key pressed, handle input
 
-    j game_loop                 # otherwise just redraw screen
+    j game_loop             
 
 key_pressed:
     lw $t2, 4($t0)             # $t2 = ASCII value of pressed key
 
-    beq $t2, 0x61, move_left   # if 'a' → move left
-    beq $t2, 0x64, move_right  # if 'd' → move right
-    beq $t2, 0x77, rotate      # if 'w' → rotate colors
-    beq $t2, 0x73, move_down   # if 's' → move down
-    beq $t2, 0x71, quit_game   # if 'q' → quit program
+    beq $t2, 0x61, move_left   # if 'a', move left
+    beq $t2, 0x64, move_right  # if 'd', move right
+    beq $t2, 0x77, rotate      # if 'w', rotate colors
+    beq $t2, 0x73, move_down   # if 's', move down
+    beq $t2, 0x71, quit_game   # if 'q', quit program
 
-    j game_loop                # if other key → ignore and redraw
+    j game_loop            
 
 move_left:
     la $t0, column_col         # load address of column_col
@@ -98,13 +104,13 @@ move_left:
     beq $t1, 1, game_loop      # if at left boundary (col=1), stop
     
     jal can_move_left           # $v0 = 1 if space is free, 0 if occupied
-    beq $v0, $zero, game_loop   # occupied -> block
+    beq $v0, $zero, game_loop   
 
-    jal erase_column           # erase gems at current position
-    lw $t1, column_col         # reload col (erase_column uses $t1)
+    jal erase_column           # erase pixels at current position
+    lw $t1, column_col         # reload col 
     addi $t1, $t1, -1          # column = column - 1 (move left)
     sw $t1, column_col         # save new col to memory
-    jal draw_column            # draw gems at new position
+    jal draw_column            # draw pixels at new position
     j game_loop
 
 move_right:
@@ -155,8 +161,8 @@ auto_drop_tick:
     sw $t0, drop_counter
  
     lw $t1, drop_delay
-    slt $t2, $t0, $t1           # $t2 = 1 if counter < delay (not yet time to drop)
-    bne $t2, $zero, auto_drop_done  # not time yet -> return early
+    slt $t2, $t0, $t1               # $t2 = 1 if counter < delay (not yet time to drop)
+    bne $t2, $zero, auto_drop_done  
  
     sw $zero, drop_counter      # reset counter for next drop cycle
     jal try_move_down           # time to drop one row
@@ -171,7 +177,7 @@ try_move_down:
     sw $ra, 0($sp)
  
     jal can_move_down           # $v0 = 1 if cell below is empty, 0 if blocked
-    beq $v0, $zero, land_column # blocked -> land the column
+    beq $v0, $zero, land_column # if blocked, land the column
  
     jal erase_column
     lw $t0, column_row
@@ -184,34 +190,34 @@ try_move_down:
     jr $ra
 
 land_column:
-    jal resolve_matches         # clear any 3-in-a-row matches and apply gravity
-    jal spawn_new_column        # start a new falling column at the top
+    jal resolve_matches            # clear any 3-in-a-row matches and apply gravity
+    jal generate_new_column        # start a new falling column at the top
  
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
     
-spawn_new_column:
+generate_new_column:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
  
     li $t0, 1
     sw $t0, column_row          # reset to top of playing field (row 1)
     li $t0, 4
-    sw $t0, column_col          # reset to centre column (col 4)
+    sw $t0, column_col          # reset to center column (col 4)
     sw $zero, drop_counter      # restart the gravity timer from 0
  
-    jal can_spawn_column        # $v0 = 1 if spawn area is clear, 0 if blocked
-    beq $v0, $zero, quit_game   # spawn blocked -> board is full -> game over
+    jal can_generate_column     # $v0 = 1 if the area to generate column is clear, 0 if blocked
+    beq $v0, $zero, quit_game   # if blocked, game over
  
     jal generate_column         # pick 3 new random colors into column_colors
-    jal draw_column             # paint the new column on the display
+    jal draw_column             # draw the new column on the display
  
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
     
-can_spawn_column:
+can_generate_column:
     addi $sp, $sp, -16
     sw $ra, 12($sp)
     sw $s0, 8($sp)
@@ -219,21 +225,21 @@ can_spawn_column:
     sw $s2, 0($sp)
  
     lw $s0, column_row          # $s0 = starting row (1)
-    lw $s1, column_col          # $s1 = spawn column (4)
-    li $s2, 0                   # $s2 = i = 0 (gem index)
+    lw $s1, column_col          # $s1 = column (4)
+    li $s2, 0                   # $s2 = i = 0 (pixel index)
  
-spawn_check_loop:
-    beq $s2, 3, spawn_clear     # checked all 3 cells and all empty -> safe
+generate_check_loop:
+    beq $s2, 3, clear           # checked all 3 cells and if all empty, safe
  
-    add $a0, $s0, $s2           # $a0 = row of gem i
+    add $a0, $s0, $s2           # $a0 = row of pixel i
     move $a1, $s1               # $a1 = column
     jal is_cell_empty           # $v0 = 1 if empty
-    beq $v0, $zero, spawn_blocked  # occupied -> game over
+    beq $v0, $zero, blocked     # if occupied, game over
  
     addi $s2, $s2, 1
-    j spawn_check_loop
+    j generate_check_loop
  
-spawn_clear:
+clear:
     li $v0, 1
     lw $s2, 0($sp)
     lw $s1, 4($sp)
@@ -242,7 +248,7 @@ spawn_clear:
     addi $sp, $sp, 16
     jr $ra
  
-spawn_blocked:
+blocked:
     move $v0, $zero
     lw $s2, 0($sp)
     lw $s1, 4($sp)
@@ -264,9 +270,9 @@ can_move_left:
     li $s2, 0                   # i = 0
  
 left_check_loop:
-    beq $s2, 3, left_clear      # all 3 cells empty -> allow move
+    beq $s2, 3, left_clear      # if all 3 cells empty, allow move
  
-    add $a0, $s0, $s2           # row of gem i
+    add $a0, $s0, $s2           # row of pixel i
     move $a1, $s1               # candidate column
     jal is_cell_empty
     beq $v0, $zero, left_blocked
@@ -339,7 +345,7 @@ can_move_down:
  
     lw $t0, column_row
     lw $t1, column_col
-    addi $a0, $t0, 3            # row just below the bottom gem = top_row + 3
+    addi $a0, $t0, 3            # row just below the bottom pixel = top row + 3
     move $a1, $t1               # same column
     jal is_cell_empty           # $v0 = 1 if empty, 0 if blocked
  
@@ -349,12 +355,12 @@ can_move_down:
     
 is_cell_empty:
     lw $t0, ADDR_DSPL
-    sll $t1, $a0, 7             # row * 128 (byte offset for this row)
+    sll $t1, $a0, 7             # vertical offset
     add $t0, $t0, $t1
-    sll $t2, $a1, 2             # col * 4   (byte offset for this column)
+    sll $t2, $a1, 2             # horizontal offset
     add $t0, $t0, $t2           # $t0 = address of the target pixel
     lw $t3, 0($t0)              # $t3 = color currently at this pixel
-    sltiu $v0, $t3, 1           # $v0 = 1 if color < 1 (i.e. == 0, black/empty)
+    sltiu $v0, $t3, 1           # $v0 = 1 if color < 1 (black/empty)
     jr $ra
 
 resolve_matches:
@@ -362,9 +368,9 @@ resolve_matches:
     sw $ra, 0($sp)              # save return address
  
 resolve_loop:
-    jal clear_match_flags       # zero out the match_flags scratch array
+    jal clear_match_flags       # zero out the match_flags array
     jal scan_for_matches        # scan board; mark matching cells; $v0 = 1 if any found
-    beq $v0, $zero, resolve_done  # no matches -> board is stable, stop
+    beq $v0, $zero, resolve_done  # if no matches, stop
  
     jal clear_marked_cells      # erase every cell whose flag was set
     jal apply_gravity           # compact each column downward to fill gaps
@@ -376,12 +382,12 @@ resolve_done:
     jr $ra
 
 clear_match_flags:
-    la $t0, match_flags         # $t0 = pointer walking through the flag array
+    la $t0, match_flags         # $t0 = pointer to the flag array
     li $t1, 320                 # 320 words = 1280 bytes to clear
  
 clear_flags_loop:
     beq $t1, $zero, clear_flags_done
-    sw $zero, 0($t0)            # write 0 (no match) to this word
+    sw $zero, 0($t0)            # write 0 to this word
     addi $t0, $t0, 4            # advance to next word
     addi $t1, $t1, -1           # decrement remaining count
     j clear_flags_loop
@@ -394,60 +400,54 @@ scan_for_matches:
     sw $ra, 16($sp)
     sw $s0, 12($sp)             # $s0 = current row
     sw $s1, 8($sp)              # $s1 = current col
-    sw $s2, 4($sp)              # $s2 = color of current cell (unused after call)
-    sw $s3, 0($sp)              # $s3 = found_match flag (accumulated OR)
+    sw $s2, 4($sp)              # $s2 = color of current cell 
+    sw $s3, 0($sp)              # $s3 = found_match flag
  
-    li $s0, 1                   # start at row 1 (row 0 is the top wall)
+    li $s0, 1                   # start at row 1
     li $s3, 0                   # no match found yet
  
 scan_row_loop:
-    slti $t0, $s0, 31           # continue while row < 31 (row 31 is the bottom wall)
+    slti $t0, $s0, 31           # continue while row < 31 
     beq $t0, $zero, scan_done
  
-    li $s1, 1                   # start at col 1 (col 0 is the left wall)
- 
+    li $s1, 1                   # start at col 1
+
 scan_col_loop:
-    slti $t0, $s1, 9            # continue while col < 9 (col 9 is the right wall)
+    slti $t0, $s1, 9            # continue while col < 9
     beq $t0, $zero, next_scan_row
  
-    # Read the color of this cell; skip it if it is empty (black).
     move $a0, $s0
     move $a1, $s1
     jal get_cell_color          # $v0 = color, or 0 if empty/grey/out-of-bounds
     move $s2, $v0
     beq $s2, $zero, next_scan_col  # empty cell -> nothing to match here
  
-    # Test all four directions starting from this cell.
-    # direction (d_row=0, d_col=1)  → horizontal right
     move $a0, $s0
     move $a1, $s1
     li $a2, 0
     li $a3, 1
-    jal check_match_direction
+    jal check_match_direction   # test horizontal right direction
     or $s3, $s3, $v0            # accumulate into found_match flag
  
-    # direction (d_row=1, d_col=0)  → vertical down
     move $a0, $s0
     move $a1, $s1
     li $a2, 1
     li $a3, 0
-    jal check_match_direction
+    jal check_match_direction   # test vertical down direction
     or $s3, $s3, $v0
  
-    # direction (d_row=1, d_col=1)  → diagonal down-right
     move $a0, $s0
     move $a1, $s1
     li $a2, 1
     li $a3, 1
-    jal check_match_direction
+    jal check_match_direction   # test diagonal down right direction
     or $s3, $s3, $v0
  
-    # direction (d_row=1, d_col=-1) → diagonal down-left
     move $a0, $s0
     move $a1, $s1
     li $a2, 1
     li $a3, -1
-    jal check_match_direction
+    jal check_match_direction   # test diagonal down left direction
     or $s3, $s3, $v0
  
 next_scan_col:
@@ -475,52 +475,46 @@ check_match_direction:
     sw $s1, 20($sp)             # $s1 = start col
     sw $s2, 16($sp)             # $s2 = base color to match against
     sw $s3, 12($sp)             # $s3 = current row being tested
-    sw $s4, 8($sp)              # $s4 = d_row
-    sw $s5, 4($sp)              # $s5 = d_col
-    sw $s6, 0($sp)              # $s6 = current col being tested (saved to survive jal)
+    sw $s4, 8($sp)              # $s4 = row change
+    sw $s5, 4($sp)              # $s5 = col change
+    sw $s6, 0($sp)              # $s6 = current col being tested
  
     move $s0, $a0               # save start row
     move $s1, $a1               # save start col
-    move $s4, $a2               # save d_row
-    move $s5, $a3               # save d_col
+    move $s4, $a2               # save row change
+    move $s5, $a3               # save col change
  
-    # Read the color of the 1st cell (the starting cell).
     move $a0, $s0
     move $a1, $s1
     jal get_cell_color          # $v0 = color of 1st cell
     move $s2, $v0               # $s2 = base color
-    beq $s2, $zero, direction_no_match  # empty/grey -> no match possible
- 
-    # Read the color of the 2nd cell: (start + d_row, start + d_col).
-    # Store the column in $s6 (a saved register) so get_cell_color cannot
-    # clobber it through its use of $t0 for bounds-check scratch work.
+    beq $s2, $zero, direction_no_match  # empty/grey, no match possible
+    
     add $s3, $s0, $s4           # $s3 = row of 2nd cell
-    add $s6, $s1, $s5           # $s6 = col of 2nd cell (safe across jal)
+    add $s6, $s1, $s5           # $s6 = col of 2nd cell 
     move $a0, $s3
     move $a1, $s6
     jal get_cell_color          # $v0 = color of 2nd cell
-    bne $v0, $s2, direction_no_match  # different color -> no match
+    bne $v0, $s2, direction_no_match  # different color, no match
  
-    # Read the color of the 3rd cell: (start + 2*d_row, start + 2*d_col).
     add $s3, $s3, $s4           # $s3 = row of 3rd cell
-    add $s6, $s6, $s5           # $s6 = col of 3rd cell (still valid in saved reg)
+    add $s6, $s6, $s5           # $s6 = col of 3rd cell
     move $a0, $s3
     move $a1, $s6
     jal get_cell_color          # $v0 = color of 3rd cell
-    bne $v0, $s2, direction_no_match  # different color -> no match
+    bne $v0, $s2, direction_no_match  # different color, no match
  
-    # All three cells match: flag them all in match_flags.
     move $a0, $s0               # flag 1st cell
     move $a1, $s1
     jal mark_match_cell
  
-    add $a0, $s0, $s4           # flag 2nd cell: start + (d_row, d_col)
+    add $a0, $s0, $s4           # flag 2nd cell
     add $a1, $s1, $s5
     jal mark_match_cell
  
-    sll $t1, $s4, 1             # 2 * d_row
-    sll $t2, $s5, 1             # 2 * d_col
-    add $a0, $s0, $t1           # flag 3rd cell: start + 2*(d_row, d_col)
+    sll $t1, $s4, 1             # 2 * row change
+    sll $t2, $s5, 1             # 2 * col change
+    add $a0, $s0, $t1           # flag 3rd cell
     add $a1, $s1, $t2
     jal mark_match_cell
  
@@ -544,36 +538,35 @@ direction_done:
 
 get_cell_color:
     addi $sp, $sp, -4
-    sw $ra, 0($sp)              # save $ra because we call display_cell_address below
+    sw $ra, 0($sp)          
  
-    # Bounds-check: reject anything outside the playable area rows 1-30, cols 1-8.
     slti $t0, $a0, 1
-    bne $t0, $zero, get_cell_invalid    # row < 1 -> out of bounds
+    bne $t0, $zero, get_cell_invalid    # if row < 1, out of bounds
     slti $t0, $a0, 31
-    beq $t0, $zero, get_cell_invalid    # row >= 31 -> out of bounds
+    beq $t0, $zero, get_cell_invalid    # if row >= 31, out of bounds
     slti $t0, $a1, 1
-    bne $t0, $zero, get_cell_invalid    # col < 1 -> out of bounds
+    bne $t0, $zero, get_cell_invalid    # if col < 1, out of bounds
     slti $t0, $a1, 9
-    beq $t0, $zero, get_cell_invalid    # col >= 9 -> out of bounds
+    beq $t0, $zero, get_cell_invalid    # if col >= 9, out of bounds
  
     jal display_cell_address    # $v0 = bitmap address of (row, col)
     lw $v0, 0($v0)              # $v0 = color currently painted at this cell
     lw $t0, GREY
-    beq $v0, $t0, get_cell_invalid  # grey border cell -> treat as empty
+    beq $v0, $t0, get_cell_invalid  # if grey border cell, treat as empty
  
-    lw $ra, 0($sp)              # restore $ra and return the color
+    lw $ra, 0($sp)          
     addi $sp, $sp, 4
     jr $ra
  
 get_cell_invalid:
-    move $v0, $zero             # return 0 to signal empty / out-of-bounds
+    move $v0, $zero             # return 0 to signal empty / out of bounds
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
 
 mark_match_cell:
     addi $sp, $sp, -4
-    sw $ra, 0($sp)              # save $ra because we call match_flag_address
+    sw $ra, 0($sp)          
     jal match_flag_address      # $v0 = address of flag for (row, col)
     li $t0, 1
     sw $t0, 0($v0)              # set the flag to 1 (matched)
@@ -600,18 +593,16 @@ clear_marked_col_loop:
     slti $t0, $s1, 9            # continue while col < 9
     beq $t0, $zero, clear_marked_next_row
  
-    # Check whether this cell was flagged as part of a match.
     move $a0, $s0
     move $a1, $s1
     jal match_flag_address      # $v0 = address of flag for (row, col)
     lw $s2, 0($v0)              # $s2 = flag value (0 or 1)
-    beq $s2, $zero, clear_marked_next_col  # not flagged -> skip
+    beq $s2, $zero, clear_marked_next_col  # if not flagged, skip
  
-    # Flagged: erase this cell from the bitmap by writing black.
     move $a0, $s0
     move $a1, $s1
     jal display_cell_address    # $v0 = bitmap address of (row, col)
-    sw $zero, 0($v0)            # write 0 (black) to erase the gem
+    sw $zero, 0($v0)            # write 0 (black) to erase the cell
  
 clear_marked_next_col:
     addi $s1, $s1, 1
@@ -635,9 +626,9 @@ apply_gravity:
     sw $s0, 12($sp)             # $s0 = current column being compacted
     sw $s1, 8($sp)              # $s1 = write_row (next empty slot from the bottom)
     sw $s2, 4($sp)              # $s2 = read_row  (scanner moving upward)
-    sw $s3, 0($sp)              # $s3 = color of gem at read_row
+    sw $s3, 0($sp)              # $s3 = color of pixel at read_row
  
-    li $s0, 1                   # process columns 1 through 8
+    li $s0, 1                   # start at col 1
  
 gravity_col_loop:
     slti $t0, $s0, 9            # continue while col < 9
@@ -647,23 +638,20 @@ gravity_col_loop:
     li $s2, 30                  # read_row also starts at row 30
  
 gravity_read_loop:
-    beq $s2, $zero, gravity_fill_loop  # finished reading -> fill remaining cells black
+    beq $s2, $zero, gravity_fill_loop  # finished reading, fill remaining cells black
  
-    # Read the color at the current read position.
     move $a0, $s2
     move $a1, $s0
     jal display_cell_address    # $v0 = bitmap address of (read_row, col)
     lw $s3, 0($v0)              # $s3 = color at this cell
-    beq $s3, $zero, gravity_next_read  # empty (black) -> skip, keep scanning upward
+    beq $s3, $zero, gravity_next_read  # if empty (black), keep scanning upward
  
-    # Found a gem.  If it is already at the write position, leave it in place.
-    beq $s1, $s2, gravity_keep_cell
+    beq $s1, $s2, gravity_keep_cell # if already at the write position, leave it in place
  
-    # Otherwise move it down to write_row and clear the old location.
     move $a0, $s1
     move $a1, $s0
     jal display_cell_address    # address of write position
-    sw $s3, 0($v0)              # paint gem at new (lower) position
+    sw $s3, 0($v0)              # paint pixel at new (lower) position
  
     move $a0, $s2
     move $a1, $s0
@@ -678,7 +666,6 @@ gravity_next_read:
     j gravity_read_loop
  
 gravity_fill_loop:
-    # Clear any cells above write_row that were not filled (top of column).
     beq $s1, $zero, gravity_next_col  # nothing left to clear
  
     move $a0, $s1
@@ -703,9 +690,9 @@ gravity_done:
 
 display_cell_address:
     lw $t0, ADDR_DSPL           # $t0 = base address of bitmap display
-    sll $t1, $a0, 7             # $t1 = row * 128  (each row is 32 words = 128 bytes)
+    sll $t1, $a0, 7             # vertical offset
     add $t0, $t0, $t1
-    sll $t2, $a1, 2             # $t2 = col * 4    (each cell is one word = 4 bytes)
+    sll $t2, $a1, 2             # horizontal offset
     add $v0, $t0, $t2           # $v0 = final address
     jr $ra
 
@@ -713,29 +700,29 @@ match_flag_address:
     la $t0, match_flags         # $t0 = base address of the flag array
     sll $t1, $a0, 5             # row * 32
     sll $t2, $a0, 3             # row * 8
-    add $t1, $t1, $t2           # row * 32 + row * 8 = row * 40
-    add $t0, $t0, $t1           # advance base by row offset
+    add $t1, $t1, $t2           # row * 40
+    add $t0, $t0, $t1           
     sll $t2, $a1, 2             # col * 4
     add $v0, $t0, $t2           # $v0 = base + row offset + col offset
     jr $ra
 
 erase_column:
     lw $t0, ADDR_DSPL          # $t0 = base display address
-    lw $t1, column_row         # $t1 = current top-gem row
+    lw $t1, column_row         # $t1 = current top pixel row
     lw $t2, column_col         # $t2 = current column
-    li $t3, 0                  # $t3 = i = 0 (loop counter)
+    li $t3, 0                  # $t3 = i = 0 
  
 erase_loop:
     beq $t3, 3, erase_done     # painted all 3 gems, stop
  
-    sll $t4, $t1, 7            # $t4 = row * 128 (byte offset for this row)
-    add $t5, $t0, $t4          # $t5 = display base + row offset
-    sll $t6, $t2, 2            # $t6 = col * 4 (byte offset for this col)
-    add $t5, $t5, $t6          # $t5 = address of this gem cell
+    sll $t4, $t1, 7            # vertical offset
+    add $t5, $t0, $t4          
+    sll $t6, $t2, 2            # horizontal offset
+    add $t5, $t5, $t6          # $t5 = address of this pixel
  
-    sw $zero, 0($t5)           # write black (0) to erase the gem
+    sw $zero, 0($t5)           # write black (0) to erase the pixel
  
-    addi $t1, $t1, 1           # move to next row (gem below)
+    addi $t1, $t1, 1           # move to next row 
     addi $t3, $t3, 1           # i++
     j erase_loop
  
@@ -743,7 +730,7 @@ erase_done:
     jr $ra
 
 generate_column:
-    li $t0, 0              # $t0 = i = 0 (loop counter)
+    li $t0, 0              # $t0 = i = 0 
 
 gen_loop:
     beq $t0, 3, gen_done
@@ -755,7 +742,7 @@ gen_loop:
     move $t1, $a0          # $t1 = random index (0-5)
 
     lw $t2, RED            # default color = RED
-    beq $t1, 0, store      # if index == 0 → keep RED
+    beq $t1, 0, store      # if index == 0, keep RED
     lw $t2, GREEN          # otherwise load GREEN
     beq $t1, 1, store
     lw $t2, BLUE
@@ -768,7 +755,7 @@ gen_loop:
 
 store:
     la $t3, column_colors   # $t3 = base address of column_colors array
-    sll $t4, $t0, 2         # $t4 = i * 4 (convert index to byte offset)
+    sll $t4, $t0, 2         # convert index to byte offset
     add $t3, $t3, $t4       # $t3 = address of column_colors[i]
     sw $t2, 0($t3)          # store selected color into column_colors[i]
 
@@ -783,7 +770,7 @@ draw_column:
 
     lw $t1, column_row      # $t1 = current row
     lw $t2, column_col      # $t2 = current column
-    li $t3, 0               # $t3 = i = 0 (loop counter)
+    li $t3, 0               # $t3 = i = 0
 
 draw_loop:
     beq $t3, 3, done
@@ -794,7 +781,7 @@ draw_loop:
     add $t5, $t5, $t6       # add this horizontal offset, update the current address in $t5
 
     la $t7, column_colors   # $t7 = base address of column_colors array
-    sll $t8, $t3, 2         # $t4 = i * 4 (convert index to byte offset)
+    sll $t8, $t3, 2         # convert index to byte offset
     add $t7, $t7, $t8       # $t7 = address of column_colors[i]
     lw $t9, 0($t7)          # load color into $t9
 
